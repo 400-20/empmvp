@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Badge, Card, List, Space, Tag, Typography } from "antd";
+import { Alert, Card, List, Space, Tag, Typography } from "antd";
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useState } from "react";
 

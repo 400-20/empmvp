@@ -34,3 +34,19 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+DATABASE_URL="postgresql://postgres:postgres8094@localhost:5432/empmvp"
+NEXTAUTH_URL="http://localhost:3000"
+NEXTAUTH_SECRET="ZZQaMksseY+robE7MLoAJlesRQtc/cynJ7sK/aZwHpw="
+SUPERADMIN_EMAIL="one@one.com"
+SUPERADMIN_PASSWORD="pass1234"
+
+# Storage (fill when wiring screenshots)
+S3_ENDPOINT=""
+S3_REGION=""
+S3_ACCESS_KEY_ID=""
+S3_SECRET_ACCESS_KEY=""
+S3_BUCKET=""
+
+# Redis / queue (fill when wiring jobs)
+REDIS_URL=""
+Install deps (npm i), run Prisma migrations/seed (npm run db:migrate && npm run db:seed), then start (npm run dev).
