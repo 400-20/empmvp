@@ -1,5 +1,6 @@
 import { authOptions } from "@/lib/auth/options";
 import { prisma } from "@/lib/prisma";
+import { logAudit } from "@/lib/audit";
 import { Prisma, UserRole } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import { NextRequest, NextResponse } from "next/server";
@@ -17,7 +18,7 @@ const querySchema = z.object({
   userId: z.string().uuid().optional(),
   startDate: z.string().date().optional(),
   endDate: z.string().date().optional(),
-  format: z.enum(["json", "csv"]).optional(),
+  format: z.enum(["json", "csv", "excel"]).optional(),
 });
 
 export async function GET(req: NextRequest) {
@@ -58,7 +59,33 @@ export async function GET(req: NextRequest) {
     },
   });
 
-  if (format === "csv") {
+  const rangeStart =
+    startDate && parsed.data.startDate ? new Date(parsed.data.startDate) : records.at(-1)?.workDate;
+  const rangeEnd =
+    endDate && parsed.data.endDate ? new Date(parsed.data.endDate) : records.at(0)?.workDate;
+
+  const holidayDates =
+    rangeStart && rangeEnd
+      ? await prisma.holiday.findMany({
+          where: {
+            orgId: session.user.orgId,
+            date: {
+              gte: rangeStart,
+              lte: rangeEnd,
+            },
+          },
+          select: { date: true },
+        })
+      : [];
+  const holidaySet = new Set(holidayDates.map((h) => h.date.toISOString().slice(0, 10)));
+
+  const normalizedRecords = records.map((r) => {
+    const isoDate = r.workDate.toISOString().slice(0, 10);
+    const status = holidaySet.has(isoDate) && r.status === "ABSENT" ? "HOLIDAY" : r.status;
+    return { ...r, status };
+  });
+
+  if (format === "csv" || format === "excel") {
     const header = [
       "Date",
       "Employee",
@@ -70,10 +97,13 @@ export async function GET(req: NextRequest) {
       "EarlyLeaveMinutes",
       "ExternalBreakMinutes",
       "OvertimeMinutes",
+      "IsHoliday",
     ];
-    const lines = records.map((r) =>
-      [
-        r.workDate.toISOString().slice(0, 10),
+    const lines = normalizedRecords.map((r) => {
+      const isoDate = r.workDate.toISOString().slice(0, 10);
+      const isHoliday = holidaySet.has(isoDate);
+      return [
+        isoDate,
         r.user.name || r.user.email,
         r.status,
         r.clockIn ? new Date(r.clockIn).toISOString() : "",
@@ -83,14 +113,30 @@ export async function GET(req: NextRequest) {
         r.earlyLeaveMinutes,
         r.externalBreakMinutes,
         r.overtimeMinutes,
-      ].join(","),
-    );
+        isHoliday ? "Yes" : "No",
+      ].join(",");
+    });
     const csv = [header.join(","), ...lines].join("\n");
+
+    await logAudit({
+      orgId: session.user.orgId,
+      actorId: session.user.id,
+      action: format === "excel" ? "export_attendance_excel" : "export_attendance_csv",
+      entity: "attendance",
+      after: { startDate, endDate, userId, count: records.length },
+    });
+    const headers = new Headers();
+    if (format === "excel") {
+      headers.set("Content-Type", "application/vnd.ms-excel");
+      headers.set("Content-Disposition", 'attachment; filename="attendance.xlsx"');
+    } else {
+      headers.set("Content-Type", "text/csv");
+    }
     return new NextResponse(csv, {
       status: 200,
-      headers: { "Content-Type": "text/csv" },
+      headers,
     });
   }
 
-  return NextResponse.json({ records });
+  return NextResponse.json({ records: normalizedRecords });
 }

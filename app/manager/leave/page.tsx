@@ -103,6 +103,31 @@ export default function ManagerLeaveApprovals() {
     [decide],
   );
 
+  const exportCsv = async () => {
+    try {
+      const params = new URLSearchParams();
+      if (range?.[0] && range?.[1]) {
+        params.set("startDate", range[0].format("YYYY-MM-DD"));
+        params.set("endDate", range[1].format("YYYY-MM-DD"));
+      }
+      params.set("format", "csv");
+      const res = await fetch(`/api/manager/leave-requests?${params.toString()}`, { cache: "no-store" });
+      const text = await res.text();
+      if (!res.ok) throw new Error("Unable to export");
+      const blob = new Blob([text], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "leave-team.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+      messageApi.success("Export ready");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unable to export";
+      messageApi.error(msg);
+    }
+  };
+
   return (
     <div className="space-y-4">
       {contextHolder}
@@ -125,6 +150,9 @@ export default function ManagerLeaveApprovals() {
               }
             }}
           />
+          <div className="mt-2">
+            <Typography.Link onClick={exportCsv}>Export CSV</Typography.Link>
+          </div>
         </div>
         <Table rowKey="id" columns={columns} dataSource={requests} loading={loading} pagination={{ pageSize: 10 }} />
       </Card>

@@ -1,5 +1,6 @@
 import { authOptions } from "@/lib/auth/options";
 import { prisma } from "@/lib/prisma";
+import { logAudit } from "@/lib/audit";
 import { CorrectionStatus, Prisma, UserRole } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import { NextRequest, NextResponse } from "next/server";
@@ -15,6 +16,7 @@ async function requireManager() {
 
 const querySchema = z.object({
   status: z.nativeEnum(CorrectionStatus).optional(),
+  format: z.enum(["json", "csv"]).optional(),
 });
 
 const decideSchema = z.object({
@@ -40,7 +42,8 @@ export async function GET(req: NextRequest) {
     orgId: session.user.orgId,
     user: { managerId: session.user.id },
   };
-  if (parsed.data.status) where.status = parsed.data.status;
+  const { status, format } = parsed.data;
+  if (status) where.status = status;
 
   const corrections = await prisma.correctionRequest.findMany({
     where,
@@ -60,6 +63,39 @@ export async function GET(req: NextRequest) {
       createdAt: true,
     },
   });
+
+  if (format === "csv") {
+    const header = [
+      "Employee",
+      "Email",
+      "WorkDate",
+      "Kind",
+      "Status",
+      "ClockIn",
+      "ClockOut",
+      "BreakStart",
+      "BreakEnd",
+      "Note",
+      "CreatedAt",
+    ];
+    const lines = corrections.map((c) =>
+      [
+        c.user.name || c.user.email,
+        c.user.email,
+        c.workDate.toISOString().slice(0, 10),
+        c.kind,
+        c.status,
+        c.proposedClockIn ? new Date(c.proposedClockIn).toISOString() : "",
+        c.proposedClockOut ? new Date(c.proposedClockOut).toISOString() : "",
+        c.proposedBreakStart ? new Date(c.proposedBreakStart).toISOString() : "",
+        c.proposedBreakEnd ? new Date(c.proposedBreakEnd).toISOString() : "",
+        (c.note ?? "").replace(/,/g, ";"),
+        c.createdAt.toISOString(),
+      ].join(","),
+    );
+    const csv = [header.join(","), ...lines].join("\n");
+    return new NextResponse(csv, { status: 200, headers: { "Content-Type": "text/csv" } });
+  }
 
   return NextResponse.json({ corrections });
 }
@@ -103,6 +139,16 @@ export async function PATCH(req: NextRequest) {
       managerId: session.user.id,
       decidedAt: new Date(),
     },
+  });
+
+  await logAudit({
+    orgId: session.user.orgId,
+    actorId: session.user.id,
+    action: status === CorrectionStatus.MANAGER_APPROVED ? "manager_approve_correction" : "manager_reject_correction",
+    entity: "correction_request",
+    entityId: parsed.data.id,
+    before: { status: correction.status },
+    after: { status },
   });
 
   return NextResponse.json({ correction: updated });

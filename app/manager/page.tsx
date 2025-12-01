@@ -40,6 +40,17 @@ type Metrics = {
     absent: number;
     holiday: number;
   };
+  last30Days?: {
+    windowDays: number;
+    avgNetMinutes: number;
+    lateDays: number;
+    earlyLeaveDays: number;
+    presentDays: number;
+    halfDays: number;
+    leaveDays: number;
+    absentDays: number;
+    holidayDays: number;
+  };
 };
 
 export default function ManagerAttendancePage() {
@@ -152,7 +163,15 @@ export default function ManagerAttendancePage() {
   const columns: ColumnsType<AttendanceRow> = [
     { title: "Date", dataIndex: "workDate", render: (v) => dayjs(v).format("YYYY-MM-DD") },
     { title: "Employee", dataIndex: ["user", "name"], render: (_v, r) => r.user.name || r.user.email },
-    { title: "Status", dataIndex: "status", render: (v) => <Tag>{v}</Tag> },
+    {
+      title: "Status",
+      dataIndex: "status",
+      render: (v) => {
+        const color =
+          v === "HOLIDAY" ? "gold" : v === "PRESENT" ? "green" : v === "ABSENT" ? "red" : "blue";
+        return <Tag color={color}>{v}</Tag>;
+      },
+    },
     { title: "Clock in", dataIndex: "clockIn", render: (v) => (v ? dayjs(v).format("HH:mm") : "—") },
     { title: "Clock out", dataIndex: "clockOut", render: (v) => (v ? dayjs(v).format("HH:mm") : "—") },
     { title: "Net (min)", dataIndex: "netMinutes" },
@@ -198,6 +217,31 @@ export default function ManagerAttendancePage() {
           <div className="text-xs text-slate-600">
             Half {metrics?.attendanceToday.half ?? 0} | Leave {metrics?.attendanceToday.leave ?? 0} | Absent {metrics?.attendanceToday.absent ?? 0}
           </div>
+        </Card>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <Card className="brand-card" loading={!metrics}>
+          <Typography.Text type="secondary">Last 30d average net</Typography.Text>
+          <Typography.Title level={3} style={{ margin: 0 }}>
+            {metrics?.last30Days ? `${Math.round(metrics.last30Days.avgNetMinutes)}m` : "--"}
+          </Typography.Title>
+        </Card>
+        <Card className="brand-card" loading={!metrics}>
+          <Typography.Text type="secondary">Late / Early days (30d)</Typography.Text>
+          <Typography.Title level={3} style={{ margin: 0 }}>
+            {metrics?.last30Days
+              ? `${metrics.last30Days.lateDays} late • ${metrics.last30Days.earlyLeaveDays} early`
+              : "--"}
+          </Typography.Title>
+        </Card>
+        <Card className="brand-card" loading={!metrics}>
+          <Typography.Text type="secondary">Status mix (30d)</Typography.Text>
+          <Typography.Title level={5} style={{ margin: 0 }}>
+            {metrics?.last30Days
+              ? `P ${metrics.last30Days.presentDays} | H ${metrics.last30Days.halfDays} | L ${metrics.last30Days.leaveDays} | A ${metrics.last30Days.absentDays} | Hol ${metrics.last30Days.holidayDays}`
+              : "--"}
+          </Typography.Title>
         </Card>
       </div>
 

@@ -73,7 +73,7 @@ export async function GET() {
     }
   } else if (role === UserRole.EMPLOYEE && orgId) {
     const recentWindow = new Date(Date.now() - 1000 * 60 * 60 * 24 * 14); // last 14 days
-    const [leavePending, correctionsPending, rejectedRecent] = await Promise.all([
+    const [leavePending, correctionsPending, rejectedRecent, rejectedCorrections, openClockOut] = await Promise.all([
       prisma.leaveRequest.count({ where: { orgId: orgId as string, userId: session.user.id, status: LeaveRequestStatus.PENDING } }),
       prisma.correctionRequest.count({ where: { orgId: orgId as string, userId: session.user.id, status: CorrectionStatus.PENDING } }),
       prisma.leaveRequest.count({
@@ -83,6 +83,25 @@ export async function GET() {
           status: LeaveRequestStatus.REJECTED,
           decidedAt: { gte: recentWindow },
         },
+      }),
+      prisma.correctionRequest.count({
+        where: {
+          orgId: orgId as string,
+          userId: session.user.id,
+          status: CorrectionStatus.REJECTED,
+          decidedAt: { gte: recentWindow },
+        },
+      }),
+      prisma.attendance.findFirst({
+        where: {
+          orgId: orgId as string,
+          userId: session.user.id,
+          clockIn: { not: null },
+          clockOut: null,
+          workDate: { lt: new Date(new Date().toDateString()) },
+        },
+        orderBy: { workDate: "desc" },
+        select: { workDate: true },
       }),
     ]);
     if (leavePending > 0) {
@@ -99,10 +118,24 @@ export async function GET() {
         type: "info",
       });
     }
+    if (rejectedCorrections > 0) {
+      notifications.push({
+        id: "corrections-rejected",
+        message: `${rejectedCorrections} correction request(s) were rejected recently`,
+        type: "warning",
+      });
+    }
     if (rejectedRecent > 0) {
       notifications.push({
         id: "leave-rejected",
         message: `${rejectedRecent} leave request(s) were rejected recently`,
+        type: "warning",
+      });
+    }
+    if (openClockOut) {
+      notifications.push({
+        id: "missed-clockout",
+        message: `Clock-out missing for ${openClockOut.workDate.toISOString().slice(0, 10)}. Please submit a correction.`,
         type: "warning",
       });
     }

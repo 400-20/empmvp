@@ -899,6 +899,7 @@ export default function SuperadminPage() {
         okText="Save"
         confirmLoading={submitting}
         destroyOnHidden 
+        width={1000}
       >
         <Form layout="vertical" form={editForm}>
           <Form.Item name="name" label="Name" rules={[{ required: true }]}>

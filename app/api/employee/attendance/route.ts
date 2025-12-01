@@ -71,14 +71,30 @@ export async function GET(req: NextRequest) {
     },
   });
 
+  const rangeStart =
+    startDate && parsed.data.startDate ? new Date(parsed.data.startDate) : records.at(-1)?.workDate;
+  const rangeEnd =
+    endDate && parsed.data.endDate ? new Date(parsed.data.endDate) : records.at(0)?.workDate;
+
+  const holidays =
+    rangeStart && rangeEnd
+      ? await prisma.holiday.findMany({
+          where: { orgId: session.user.orgId, date: { gte: rangeStart, lte: rangeEnd } },
+          select: { date: true },
+        })
+      : [];
+  const holidaySet = new Set(holidays.map((h) => h.date.toISOString().slice(0, 10)));
+
   const enriched = records.map((r) => {
+    const isoDate = r.workDate.toISOString().slice(0, 10);
+    const status = holidaySet.has(isoDate) && r.status === "ABSENT" ? "HOLIDAY" : r.status;
     const lunchBreakMinutes = (r.breaks ?? []).reduce((sum, b) => {
       if (b.type !== "LUNCH") return sum;
       const end = b.end ?? new Date();
       const diff = Math.max(0, (end.getTime() - b.start.getTime()) / 60000);
       return sum + Math.round(diff);
     }, 0);
-    return { ...r, lunchBreakMinutes };
+    return { ...r, status, lunchBreakMinutes };
   });
 
   return NextResponse.json({ records: enriched });

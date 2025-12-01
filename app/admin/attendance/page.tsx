@@ -51,7 +51,7 @@ export default function AdminAttendancePage() {
     fetchData();
   }, []);
 
-  const exportCsv = async () => {
+  const exportCsv = async (format: "csv" | "excel") => {
     try {
       const params = new URLSearchParams();
       if (range?.[0] && range?.[1]) {
@@ -59,7 +59,7 @@ export default function AdminAttendancePage() {
         params.set("endDate", range[1].format("YYYY-MM-DD"));
       }
       if (userFilter) params.set("userId", userFilter);
-      params.set("format", "csv");
+      params.set("format", format);
       const res = await fetch(`/api/admin/attendance?${params.toString()}`, { cache: "no-store" });
       const text = await res.text();
       if (!res.ok) throw new Error("Unable to export");
@@ -67,7 +67,7 @@ export default function AdminAttendancePage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "attendance.csv";
+      a.download = format === "excel" ? "attendance.xlsx" : "attendance.csv";
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
@@ -80,7 +80,15 @@ export default function AdminAttendancePage() {
     () => [
       { title: "Date", dataIndex: "workDate", render: (v) => dayjs(v).format("YYYY-MM-DD") },
       { title: "Employee", dataIndex: ["user", "name"], render: (_v, r) => r.user.name || r.user.email },
-      { title: "Status", dataIndex: "status", render: (v) => <Tag>{v}</Tag> },
+      {
+        title: "Status",
+        dataIndex: "status",
+        render: (v) => {
+          const color =
+            v === "HOLIDAY" ? "gold" : v === "PRESENT" ? "green" : v === "ABSENT" ? "red" : "blue";
+          return <Tag color={color}>{v}</Tag>;
+        },
+      },
       { title: "Clock in", dataIndex: "clockIn", render: (v) => (v ? dayjs(v).format("HH:mm") : "—") },
       { title: "Clock out", dataIndex: "clockOut", render: (v) => (v ? dayjs(v).format("HH:mm") : "—") },
       { title: "Net (min)", dataIndex: "netMinutes" },
@@ -134,9 +142,10 @@ export default function AdminAttendancePage() {
           <Button onClick={() => fetchData(range?.[0]?.format("YYYY-MM-DD"), range?.[1]?.format("YYYY-MM-DD"), userFilter)}>
             Refresh
           </Button>
-          <Button type="primary" onClick={exportCsv}>
+          <Button type="primary" onClick={() => exportCsv("csv")}>
             Export CSV
           </Button>
+          <Button onClick={() => exportCsv("excel")}>Export Excel</Button>
         </div>
 
         <Table

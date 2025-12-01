@@ -41,6 +41,7 @@ async function sumExistingLeaveDays(params: {
   userId: string;
   leaveTypeId: string;
   year: number;
+  statuses?: LeaveRequestStatus[];
   excludeRequestId?: string;
 }) {
   const startOfYear = new Date(Date.UTC(params.year, 0, 1));
@@ -50,7 +51,7 @@ async function sumExistingLeaveDays(params: {
       orgId: params.orgId,
       userId: params.userId,
       leaveTypeId: params.leaveTypeId,
-      status: { in: [LeaveRequestStatus.APPROVED, LeaveRequestStatus.PENDING] },
+      status: { in: params.statuses ?? [LeaveRequestStatus.APPROVED, LeaveRequestStatus.PENDING] },
       id: params.excludeRequestId ? { not: params.excludeRequestId } : undefined,
       startDate: { lte: endOfYear },
       endDate: { gte: startOfYear },
@@ -129,17 +130,30 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid date range" }, { status: 400 });
   }
 
-  if (leaveType.defaultAnnualQuota !== null && leaveType.defaultAnnualQuota !== undefined) {
-    const year = start.getUTCFullYear();
+  const year = start.getUTCFullYear();
+  const balance = await prisma.leaveBalance.findUnique({
+    where: {
+      orgId_userId_leaveTypeId_year: {
+        orgId: session.user.orgId,
+        userId: session.user.id,
+        leaveTypeId: parsed.data.leaveTypeId,
+        year,
+      },
+    },
+    select: { balance: true, used: true },
+  });
+
+  const limit = balance?.balance ?? leaveType.defaultAnnualQuota;
+  if (limit !== null && limit !== undefined) {
     const alreadyUsed = await sumExistingLeaveDays({
       orgId: session.user.orgId,
       userId: session.user.id,
       leaveTypeId: parsed.data.leaveTypeId,
       year,
     });
-    if (alreadyUsed + requestDays > leaveType.defaultAnnualQuota) {
+    if (alreadyUsed + requestDays > limit) {
       return NextResponse.json(
-        { error: `Quota exceeded. Available: ${Math.max(0, leaveType.defaultAnnualQuota - alreadyUsed)} day(s).` },
+        { error: `Quota exceeded. Available: ${Math.max(0, limit - alreadyUsed)} day(s).` },
         { status: 400 },
       );
     }

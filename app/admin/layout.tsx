@@ -18,6 +18,7 @@ const navItems = [
   { key: "/admin/holidays", label: "Holidays" },
   { key: "/admin/audit", label: "Audit log" },
   { key: "/admin/leave-types", label: "Leave types" },
+  { key: "/admin/leave-balances", label: "Leave balances" },
   { key: "/admin/leave-requests", label: "Leave approvals" },
   { key: "/admin/corrections", label: "Corrections" },
   { key: "/admin/exports", label: "Exports" },
@@ -32,6 +33,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const [notifs, setNotifs] = useState<{ id: string; message: string; type: string }[]>([]);
 
   useEffect(() => {
+    let timer: NodeJS.Timeout | null = null;
     const loadNotifs = async () => {
       try {
         const res = await fetch("/api/notifications", { cache: "no-store" });
@@ -42,9 +44,14 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         }
       } catch {
         setNotifCount(0);
+      } finally {
+        timer = setTimeout(loadNotifs, 30000);
       }
     };
     loadNotifs();
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
   }, []);
 
   const activeKey =

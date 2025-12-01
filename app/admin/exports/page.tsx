@@ -57,11 +57,20 @@ export default function AdminExportsPage() {
             <Button type="primary" onClick={() => download(withRangeParams("/api/admin/attendance?format=csv"), "attendance.csv")}>
               Attendance CSV
             </Button>
+            <Button type="default" onClick={() => download(withRangeParams("/api/admin/attendance?format=excel"), "attendance.xlsx")}>
+              Attendance Excel
+            </Button>
             <Button type="default" onClick={() => download(withRangeParams("/api/admin/exports/leave"), "leave.csv")}>
               Leave CSV
             </Button>
+            <Button type="default" onClick={() => download(withRangeParams("/api/admin/exports/leave?format=excel"), "leave.xlsx")}>
+              Leave Excel
+            </Button>
             <Button type="default" onClick={() => download(withRangeParams("/api/admin/exports/payroll"), "payroll.csv")}>
               Payroll CSV
+            </Button>
+            <Button type="default" onClick={() => download(withRangeParams("/api/admin/exports/payroll?format=excel"), "payroll.xlsx")}>
+              Payroll Excel
             </Button>
           </Space>
           <Typography.Text type="secondary">

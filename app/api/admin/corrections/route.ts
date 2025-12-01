@@ -1,5 +1,6 @@
 import { authOptions } from "@/lib/auth/options";
 import { prisma } from "@/lib/prisma";
+import { logAudit } from "@/lib/audit";
 import { CorrectionStatus, Prisma, UserRole } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import { NextRequest, NextResponse } from "next/server";
@@ -96,6 +97,16 @@ export async function PATCH(req: NextRequest) {
       adminId: session.user.id,
       decidedAt: new Date(),
     },
+  });
+
+  await logAudit({
+    orgId: session.user.orgId,
+    actorId: session.user.id,
+    action: status === CorrectionStatus.ADMIN_APPROVED ? "admin_approve_correction" : "admin_reject_correction",
+    entity: "correction_request",
+    entityId: parsed.data.id,
+    before: { status: correction.status },
+    after: { status },
   });
 
   return NextResponse.json({ correction: updated });

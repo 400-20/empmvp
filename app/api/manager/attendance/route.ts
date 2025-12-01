@@ -1,5 +1,6 @@
 import { authOptions } from "@/lib/auth/options";
 import { prisma } from "@/lib/prisma";
+import { logAudit } from "@/lib/audit";
 import { Prisma, UserRole } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import { NextRequest, NextResponse } from "next/server";
@@ -62,6 +63,26 @@ export async function GET(req: NextRequest) {
     },
   });
 
+  const rangeStart =
+    startDate && parsed.data.startDate ? new Date(parsed.data.startDate) : records.at(-1)?.workDate;
+  const rangeEnd =
+    endDate && parsed.data.endDate ? new Date(parsed.data.endDate) : records.at(0)?.workDate;
+
+  const holidays =
+    rangeStart && rangeEnd
+      ? await prisma.holiday.findMany({
+          where: { orgId: session.user.orgId, date: { gte: rangeStart, lte: rangeEnd } },
+          select: { date: true },
+        })
+      : [];
+  const holidaySet = new Set(holidays.map((h) => h.date.toISOString().slice(0, 10)));
+
+  const normalizedRecords = records.map((r) => {
+    const isoDate = r.workDate.toISOString().slice(0, 10);
+    const status = holidaySet.has(isoDate) && r.status === "ABSENT" ? "HOLIDAY" : r.status;
+    return { ...r, status };
+  });
+
   if (format === "csv") {
     const header = [
       "Date",
@@ -75,9 +96,10 @@ export async function GET(req: NextRequest) {
       "ExternalBreakMinutes",
       "OvertimeMinutes",
     ];
-    const lines = records.map((r) =>
-      [
-        r.workDate.toISOString().slice(0, 10),
+    const lines = normalizedRecords.map((r) => {
+      const isoDate = r.workDate.toISOString().slice(0, 10);
+      return [
+        isoDate,
         r.user.name || r.user.email,
         r.status,
         r.clockIn ? new Date(r.clockIn).toISOString() : "",
@@ -87,11 +109,18 @@ export async function GET(req: NextRequest) {
         r.earlyLeaveMinutes,
         r.externalBreakMinutes,
         r.overtimeMinutes,
-      ].join(","),
-    );
+      ].join(",");
+    });
     const csv = [header.join(","), ...lines].join("\n");
+    await logAudit({
+      orgId: session.user.orgId,
+      actorId: session.user.id,
+      action: "manager_export_attendance_csv",
+      entity: "attendance",
+      after: { startDate, endDate, count: records.length },
+    });
     return new NextResponse(csv, { status: 200, headers: { "Content-Type": "text/csv" } });
   }
 
-  return NextResponse.json({ records });
+  return NextResponse.json({ records: normalizedRecords });
 }

@@ -8,6 +8,7 @@ import { z } from "zod";
 const querySchema = z.object({
   startDate: z.string().date(),
   endDate: z.string().date(),
+  format: z.enum(["csv", "json", "excel"]).default("csv").optional(),
 });
 
 export async function GET(req: NextRequest) {
@@ -24,6 +25,7 @@ export async function GET(req: NextRequest) {
 
   const start = new Date(parsed.data.startDate);
   const end = new Date(parsed.data.endDate);
+  const format = parsed.data.format ?? "csv";
 
   const requests = await prisma.leaveRequest.findMany({
     where: {
@@ -34,6 +36,10 @@ export async function GET(req: NextRequest) {
     include: { leaveType: { select: { code: true, name: true } }, user: { select: { name: true, email: true } } },
     orderBy: { createdAt: "desc" },
   });
+
+  if (format === "json") {
+    return NextResponse.json({ requests });
+  }
 
   const header = ["Employee", "Email", "LeaveType", "StartDate", "EndDate", "HalfDay", "Status", "Reason", "CreatedAt"];
   const lines = requests.map((r) =>
@@ -51,5 +57,13 @@ export async function GET(req: NextRequest) {
   );
 
   const csv = [header.join(","), ...lines].join("\n");
-  return new NextResponse(csv, { status: 200, headers: { "Content-Type": "text/csv" } });
+  const headers = new Headers();
+  if (format === "excel") {
+    headers.set("Content-Type", "application/vnd.ms-excel");
+    headers.set("Content-Disposition", 'attachment; filename="leave.xlsx"');
+  } else {
+    headers.set("Content-Type", "text/csv");
+  }
+
+  return new NextResponse(csv, { status: 200, headers });
 }

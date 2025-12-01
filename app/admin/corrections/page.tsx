@@ -106,10 +106,20 @@ export default function AdminCorrectionsPage() {
         key: "actions",
         render: (_value, record) => (
           <Space>
-            <Button size="small" type="primary" onClick={() => decide(record.id, "approve")} disabled={record.status === "ADMIN_APPROVED"}>
+            <Button
+              size="small"
+              type="primary"
+              onClick={() => decide(record.id, "approve")}
+              disabled={record.status === "ADMIN_APPROVED" || record.status === "REJECTED"}
+            >
               Approve
             </Button>
-            <Button size="small" danger onClick={() => decide(record.id, "reject")} disabled={record.status === "REJECTED"}>
+            <Button
+              size="small"
+              danger
+              onClick={() => decide(record.id, "reject")}
+              disabled={record.status === "REJECTED"}
+            >
               Reject
             </Button>
           </Space>

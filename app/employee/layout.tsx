@@ -26,6 +26,7 @@ export default function EmployeeLayout({ children }: { children: ReactNode }) {
   const [notifs, setNotifs] = useState<{ id: string; message: string; type: string }[]>([]);
 
   useEffect(() => {
+    let timer: NodeJS.Timeout | null = null;
     const load = async () => {
       try {
         const res = await fetch("/api/notifications", { cache: "no-store" });
@@ -36,9 +37,14 @@ export default function EmployeeLayout({ children }: { children: ReactNode }) {
         }
       } catch {
         setNotifCount(0);
+      } finally {
+        timer = setTimeout(load, 30000);
       }
     };
     load();
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
   }, []);
 
   const activeKey =

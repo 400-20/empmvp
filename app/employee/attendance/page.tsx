@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Card, DatePicker, Table, Typography } from "antd";
+import { Alert, Card, DatePicker, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs, { Dayjs } from "dayjs";
 import { useEffect, useState } from "react";
@@ -60,7 +60,15 @@ export default function EmployeeAttendanceHistory() {
       dataIndex: "clockOut",
       render: (v) => (v ? dayjs(v).format("HH:mm") : "—"),
     },
-    { title: "Status", dataIndex: "status" },
+    {
+      title: "Status",
+      dataIndex: "status",
+      render: (v) => {
+        const color =
+          v === "HOLIDAY" ? "gold" : v === "PRESENT" ? "green" : v === "ABSENT" ? "red" : "blue";
+        return <Tag color={color}>{v}</Tag>;
+      },
+    },
     { title: "Net (min)", dataIndex: "netMinutes" },
     { title: "Late (min)", dataIndex: "lateMinutes" },
     { title: "Early leave (min)", dataIndex: "earlyLeaveMinutes" },
