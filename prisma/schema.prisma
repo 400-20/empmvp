@@ -1,0 +1,392 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  SUPERADMIN
+  ORG_ADMIN
+  MANAGER
+  EMPLOYEE
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum OrgStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  HALF
+  ABSENT
+  LEAVE
+  HOLIDAY
+}
+
+enum BreakType {
+  LUNCH
+  EXTERNAL
+}
+
+enum CorrectionStatus {
+  PENDING
+  MANAGER_APPROVED
+  ADMIN_APPROVED
+  REJECTED
+}
+
+enum CorrectionKind {
+  CLOCK
+  BREAK
+}
+
+enum LeaveRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model Organization {
+  id                        String    @id @default(uuid())
+  name                      String
+  status                    OrgStatus @default(ACTIVE)
+  planName                  String    @default("default")
+  userLimit                 Int?      // plan-imposed max active users
+  screenshotLimit           Int?      // plan-imposed max screenshots stored
+  retentionDays             Int?      // plan-imposed retention override
+  defaultTimezone           String?   // e.g., "Asia/Kolkata"
+  workdayStartMinutes       Int?      // minutes from midnight
+  workdayEndMinutes         Int?
+  requiredDailyMinutes      Int?      // required minutes per full day
+  halfDayThresholdMinutes   Int?      // threshold for half-day
+  paidLunchMinutes          Int?      // paid lunch duration
+  lunchWindowStartMinutes   Int?      // allowed lunch start window
+  lunchWindowEndMinutes     Int?
+  allowExternalBreaks       Boolean   @default(true)
+  graceLateMinutes          Int?      @default(0)
+  graceEarlyMinutes         Int?      @default(0)
+  screenshotIntervalMinutes Int?      // default screenshot frequency
+  screenshotRetentionDays   Int?      // default retention days
+  screenshotPolicyLocked    Boolean   @default(false) // if true, org admins cannot override interval/retention
+  screenshotMonitoredRoles  String[]  @default([]) // roles monitored
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+
+  users           User[]
+  teams           Team[]
+  holidays        Holiday[]
+  leaveTypes      LeaveType[]
+  leaveRequests   LeaveRequest[]
+  leaveBalances   LeaveBalance[]
+  attendances     Attendance[]
+  corrections     CorrectionRequest[]
+  dwr             DailyWorkReport[]
+  screenshots     Screenshot[]
+  auditLogs       AuditLog[]
+  breaks          Break[]
+}
+
+model User {
+  id           String      @id @default(uuid())
+  orgId        String?
+  org          Organization? @relation(fields: [orgId], references: [id])
+  role         UserRole
+  status       UserStatus @default(ACTIVE)
+  email        String
+  name         String?
+  passwordHash String?
+  managerId    String?
+  manager      User?       @relation("UserManager", fields: [managerId], references: [id])
+  subordinates User[]      @relation("UserManager")
+  ctcMonthly   Decimal?    @db.Decimal(12, 2)
+  probationEnd DateTime?
+  timezone     String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  teams         TeamMember[]
+  managedTeams  Team[]     @relation("TeamManager")
+  attendances   Attendance[]
+  breaks        Break[]
+  leaveRequests LeaveRequest[]
+  managedLeaveApprovals LeaveRequest[] @relation("ManagerLeaveApproval")
+  adminLeaveApprovals   LeaveRequest[] @relation("AdminLeaveApproval")
+  leaveBalances LeaveBalance[]
+  corrections   CorrectionRequest[]
+  managedCorrections    CorrectionRequest[] @relation("ManagerCorrection")
+  adminCorrections      CorrectionRequest[] @relation("AdminCorrection")
+  dwr           DailyWorkReport[]
+  screenshots   Screenshot[]
+  auditLogs     AuditLog[]
+  sessions      Session[]
+  accounts      Account[]
+
+  @@unique([email])
+  @@unique([orgId, email])
+}
+
+model Team {
+  id        String    @id @default(uuid())
+  orgId     String
+  org       Organization @relation(fields: [orgId], references: [id])
+  name      String
+  managerId String?
+  manager   User?     @relation("TeamManager", fields: [managerId], references: [id])
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  members TeamMember[]
+
+  @@unique([orgId, name])
+}
+
+model TeamMember {
+  id     String @id @default(uuid())
+  teamId String
+  userId String
+  team   Team   @relation(fields: [teamId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@unique([teamId, userId])
+}
+
+model Holiday {
+  id        String   @id @default(uuid())
+  orgId     String
+  org       Organization @relation(fields: [orgId], references: [id])
+  date      DateTime @db.Date
+  label     String
+  isFullDay Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@unique([orgId, date])
+}
+
+model LeaveType {
+  id                 String   @id @default(uuid())
+  orgId              String
+  org                Organization @relation(fields: [orgId], references: [id])
+  code               String
+  name               String
+  isPaid             Boolean  @default(true)
+  defaultAnnualQuota Int?     // org-level default quota
+  createdAt          DateTime @default(now())
+
+  leaveBalances LeaveBalance[]
+  leaveRequests LeaveRequest[]
+
+  @@unique([orgId, code])
+}
+
+model LeaveBalance {
+  id          String   @id @default(uuid())
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id])
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  leaveTypeId String
+  leaveType   LeaveType @relation(fields: [leaveTypeId], references: [id])
+  year        Int
+  balance     Int      @default(0)
+  used        Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([orgId, userId, leaveTypeId, year])
+}
+
+model LeaveRequest {
+  id           String             @id @default(uuid())
+  orgId        String
+  org          Organization       @relation(fields: [orgId], references: [id])
+  userId       String
+  user         User               @relation(fields: [userId], references: [id])
+  leaveTypeId  String
+  leaveType    LeaveType          @relation(fields: [leaveTypeId], references: [id])
+  startDate    DateTime           @db.Date
+  endDate      DateTime           @db.Date
+  isHalfDay    Boolean            @default(false)
+  status       LeaveRequestStatus @default(PENDING)
+  reason       String?
+  managerId    String?
+  manager      User?              @relation("ManagerLeaveApproval", fields: [managerId], references: [id])
+  adminId      String?
+  admin        User?              @relation("AdminLeaveApproval", fields: [adminId], references: [id])
+  decidedAt    DateTime?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@index([orgId, userId, status])
+}
+
+model Attendance {
+  id                 String            @id @default(uuid())
+  orgId              String
+  org                Organization      @relation(fields: [orgId], references: [id])
+  userId             String
+  user               User              @relation(fields: [userId], references: [id])
+  workDate           DateTime          @db.Date
+  clockIn            DateTime?
+  clockOut           DateTime?
+  status             AttendanceStatus  @default(PRESENT)
+  netMinutes         Int               @default(0)
+  lateMinutes        Int               @default(0)
+  earlyLeaveMinutes  Int               @default(0)
+  externalBreakMinutes Int             @default(0)
+  overtimeMinutes    Int               @default(0)
+  source             String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  breaks      Break[]
+  dwr         DailyWorkReport?
+  corrections CorrectionRequest[] @relation("AttendanceCorrection")
+  screenshots Screenshot[]
+
+  @@unique([orgId, userId, workDate])
+  @@index([orgId, workDate])
+}
+
+model Break {
+  id            String    @id @default(uuid())
+  orgId         String
+  org           Organization @relation(fields: [orgId], references: [id])
+  attendanceId  String
+  attendance    Attendance @relation(fields: [attendanceId], references: [id])
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  type          BreakType
+  start         DateTime
+  // Nullable until ended
+  end           DateTime?
+  deductedMinutes Int     @default(0)
+  createdAt     DateTime  @default(now())
+
+  @@index([orgId, userId, type])
+}
+
+model CorrectionRequest {
+  id               String           @id @default(uuid())
+  orgId            String
+  org              Organization     @relation(fields: [orgId], references: [id])
+  userId           String
+  user             User             @relation(fields: [userId], references: [id])
+  attendanceId     String?
+  attendance       Attendance?      @relation("AttendanceCorrection", fields: [attendanceId], references: [id])
+  workDate         DateTime         @db.Date
+  kind             CorrectionKind
+  proposedClockIn  DateTime?
+  proposedClockOut DateTime?
+  proposedBreakStart DateTime?
+  proposedBreakEnd DateTime?
+  note             String?
+  status           CorrectionStatus @default(PENDING)
+  managerId        String?
+  manager          User?            @relation("ManagerCorrection", fields: [managerId], references: [id])
+  adminId          String?
+  admin            User?            @relation("AdminCorrection", fields: [adminId], references: [id])
+  decidedAt        DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([orgId, userId, status])
+}
+
+model DailyWorkReport {
+  id         String     @id @default(uuid())
+  orgId      String
+  org        Organization @relation(fields: [orgId], references: [id])
+  userId     String
+  user       User       @relation(fields: [userId], references: [id])
+  attendanceId String?
+  attendance Attendance? @relation(fields: [attendanceId], references: [id])
+  workDate   DateTime   @db.Date
+  content    String
+  managerNote String?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  @@unique([orgId, userId, workDate])
+  @@unique([attendanceId])
+}
+
+model Screenshot {
+  id          String    @id @default(uuid())
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id])
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  attendanceId String?
+  attendance  Attendance? @relation(fields: [attendanceId], references: [id])
+  capturedAt  DateTime
+  url         String
+  thumbnailUrl String?
+  isFlagged   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+
+  @@index([orgId, userId, capturedAt])
+}
+
+model AuditLog {
+  id        String    @id @default(uuid())
+  orgId     String?
+  org       Organization? @relation(fields: [orgId], references: [id])
+  actorId   String?
+  actor     User?     @relation(fields: [actorId], references: [id])
+  action    String
+  entity    String
+  entityId  String?
+  before    Json?
+  after     Json?
+  createdAt DateTime  @default(now())
+
+  @@index([orgId, createdAt])
+  @@index([entity, entityId])
+}
+
+// NextAuth models
+model Account {
+  id                String  @id @default(uuid())
+  userId            String
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expires      DateTime
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
