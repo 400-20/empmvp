@@ -41,7 +41,12 @@ export async function GET(req: NextRequest) {
 
   const where: Prisma.LeaveRequestWhereInput = {
     orgId: session.user.orgId,
-    user: { managerId: session.user.id },
+    user: {
+      OR: [
+        { managerId: session.user.id },
+        { teams: { some: { team: { managerId: session.user.id } } } },
+      ],
+    },
   };
   const { startDate, endDate, format } = parsed.data;
   if (startDate || endDate) {

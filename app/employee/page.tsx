@@ -180,13 +180,14 @@ export default function EmployeeClockPage() {
                 </Card>
               ) : (
                 <ClockCard
+                title={stage.label}
                   attendance={attendance as ClockAttendance | null}
                   pendingAction={pendingAction}
                   onAction={doAction}
                 />
               )}
 
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 mt-2">
+              <div className="grid gap-3 sm:grid-cols-2   mt-2">
                 <StatPill
                   icon={<FieldTimeOutlined />}
                   label="Worked today"
@@ -200,12 +201,12 @@ export default function EmployeeClockPage() {
                   tone="indigo"
                   footer={openLunch || openExternal ? "Break running now" : "No active break"}
                 />
-                <StatPill
+                {/* <StatPill
                   icon={<ThunderboltOutlined />}
                   label="Status"
                   value={stage.label}
                   tone="emerald"
-                />
+                /> */}
               </div>
             </div>
 
@@ -215,11 +216,6 @@ export default function EmployeeClockPage() {
               extra={<Tag color={stage.color}>{stage.label}</Tag>}
             >
               <Space direction="vertical" size={10} className="w-full">
-                <Badge
-                  status={openLunch || openExternal ? "processing" : "default"}
-                  text={openLunch || openExternal ? "On break" : "Not on break"}
-                />
-                <Divider className="my-1" />
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div className="rounded-xl bg-slate-50 p-3">
                     <div className="text-xs uppercase text-slate-500">Clocked in</div>

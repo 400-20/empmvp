@@ -1,6 +1,6 @@
 import { authOptions } from "@/lib/auth/options";
 import { prisma } from "@/lib/prisma";
-import { AttendanceStatus, CorrectionStatus, LeaveRequestStatus, UserRole } from "@prisma/client";
+import { AttendanceStatus, CorrectionStatus, LeaveRequestStatus, UserRole, Prisma } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 
@@ -19,15 +19,24 @@ export async function GET() {
   const today = startOfUtcDay(new Date());
    const thirtyDaysAgo = startOfUtcDay(new Date(Date.now() - 1000 * 60 * 60 * 24 * 30));
 
+  const userScope: Prisma.UserWhereInput = {
+    orgId,
+    status: "ACTIVE",
+    OR: [
+      { managerId },
+      { teams: { some: { team: { managerId } } } },
+    ],
+  };
+
   const [teamSize, pendingLeave, pendingCorrections, todaysAttendance] = await Promise.all([
-    prisma.user.count({ where: { orgId, managerId, status: "ACTIVE" } }),
-    prisma.leaveRequest.count({ where: { orgId, status: LeaveRequestStatus.PENDING, user: { managerId } } }),
+    prisma.user.count({ where: userScope }),
+    prisma.leaveRequest.count({ where: { orgId, status: LeaveRequestStatus.PENDING, user: userScope } }),
     prisma.correctionRequest.count({
-      where: { orgId, status: CorrectionStatus.PENDING, user: { managerId } },
+      where: { orgId, status: CorrectionStatus.PENDING, user: userScope },
     }),
     prisma.attendance.groupBy({
       by: ["status"],
-      where: { orgId, workDate: today, user: { managerId } },
+      where: { orgId, workDate: today, user: userScope },
       _count: { status: true },
     }),
   ]);
@@ -38,7 +47,7 @@ export async function GET() {
   }, {});
 
   const recentAttendance = await prisma.attendance.findMany({
-    where: { orgId, workDate: { gte: thirtyDaysAgo, lte: today }, user: { managerId } },
+    where: { orgId, workDate: { gte: thirtyDaysAgo, lte: today }, user: userScope },
     select: {
       status: true,
       netMinutes: true,
@@ -57,6 +66,7 @@ export async function GET() {
       if (a.status === AttendanceStatus.HALF) acc.halfDays += 1;
       if (a.status === AttendanceStatus.LEAVE) acc.leaveDays += 1;
       if (a.status === AttendanceStatus.ABSENT) acc.absentDays += 1;
+      if (a.status === AttendanceStatus.HOLIDAY) acc.holidayDays += 1;
       return acc;
     },
     {
@@ -68,6 +78,7 @@ export async function GET() {
       halfDays: 0,
       leaveDays: 0,
       absentDays: 0,
+      holidayDays: 0,
     },
   );
 
@@ -92,6 +103,7 @@ export async function GET() {
         halfDays: summary.halfDays,
         leaveDays: summary.leaveDays,
         absentDays: summary.absentDays,
+        holidayDays: summary.holidayDays,
       },
     },
   });

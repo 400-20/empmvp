@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
 
   const attendances = await prisma.attendance.findMany({
     where: { orgId: session.user.orgId, workDate: { gte: start, lte: end } },
-    include: { user: { select: { id: true, name: true, email: true } } },
+    include: { user: { select: { id: true, name: true, email: true, ctcMonthly: true } } },
   });
 
   const leaveRequests = await prisma.leaveRequest.findMany({
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
       startDate: { lte: end },
       endDate: { gte: start },
     },
-    include: { leaveType: { select: { code: true } }, user: { select: { id: true } } },
+    include: { leaveType: { select: { code: true, isPaid: true } }, user: { select: { id: true, name: true, email: true, ctcMonthly: true } } },
   });
 
   type Row = {
@@ -67,6 +67,9 @@ export async function GET(req: NextRequest) {
     externalBreakMinutes: number;
     overtimeMinutes: number;
     leaveByType: Record<string, number>;
+    paidLeaveDays: number;
+    unpaidLeaveDays: number;
+    ctcMonthly?: string | null;
   };
 
   const rows = new Map<string, Row>();
@@ -84,10 +87,13 @@ export async function GET(req: NextRequest) {
         holidayDays: 0,
         netMinutes: 0,
         externalBreakMinutes: 0,
-        overtimeMinutes: 0,
-        leaveByType: {},
-      });
-    }
+      overtimeMinutes: 0,
+      leaveByType: {},
+      paidLeaveDays: 0,
+      unpaidLeaveDays: 0,
+      ctcMonthly: a.user.ctcMonthly?.toString(),
+    });
+  }
     const row = rows.get(a.userId)!;
     row.netMinutes += a.netMinutes ?? 0;
     row.externalBreakMinutes += a.externalBreakMinutes ?? 0;
@@ -103,15 +109,40 @@ export async function GET(req: NextRequest) {
   });
 
   leaveRequests.forEach((lr) => {
-    const row = rows.get(lr.userId);
-    if (!row) return;
+    if (!rows.has(lr.userId)) {
+      rows.set(lr.userId, {
+        userId: lr.userId,
+        name: lr.user.name ?? "",
+        email: lr.user.email,
+        presentDays: 0,
+        halfDays: 0,
+        leaveDays: 0,
+        absentDays: 0,
+        holidayDays: 0,
+        netMinutes: 0,
+        externalBreakMinutes: 0,
+        overtimeMinutes: 0,
+        leaveByType: {},
+        paidLeaveDays: 0,
+        unpaidLeaveDays: 0,
+        ctcMonthly: lr.user.ctcMonthly?.toString(),
+      });
+    }
+    const row = rows.get(lr.userId)!;
     const code = lr.leaveType.code;
     const days = dayCount(
       new Date(Math.max(start.getTime(), lr.startDate.getTime())),
       new Date(Math.min(end.getTime(), lr.endDate.getTime())),
     );
     row.leaveByType[code] = (row.leaveByType[code] ?? 0) + days;
+    if (lr.leaveType.isPaid) {
+      row.paidLeaveDays += days;
+    } else {
+      row.unpaidLeaveDays += days;
+    }
   });
+
+  const workingDays = dayCount(start, end);
 
   if (format === "json") {
     return NextResponse.json({ rows: Array.from(rows.values()) });
@@ -129,6 +160,10 @@ export async function GET(req: NextRequest) {
     "OvertimeMinutes",
     "HolidayDays",
     "LeaveByType",
+    "PaidLeaveDays",
+    "UnpaidLeaveDays",
+    "PayableDays",
+    "PayableAmount",
   ];
 
   const lines = Array.from(rows.values()).map((r) =>
@@ -146,6 +181,16 @@ export async function GET(req: NextRequest) {
       Object.entries(r.leaveByType)
         .map(([code, count]) => `${code}:${count}`)
         .join("|"),
+      r.paidLeaveDays,
+      r.unpaidLeaveDays,
+      r.presentDays + r.paidLeaveDays + r.halfDays * 0.5,
+      (() => {
+        const monthly = r.ctcMonthly ? Number(r.ctcMonthly) : 0;
+        if (!monthly || workingDays <= 0) return 0;
+        const perDay = monthly / workingDays;
+        const payableDays = r.presentDays + r.paidLeaveDays + r.halfDays * 0.5;
+        return Math.max(0, Number((perDay * payableDays).toFixed(2)));
+      })(),
     ].join(","),
   );
 

@@ -5,6 +5,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
 enum UserRole {
@@ -18,6 +19,23 @@ enum UserStatus {
   ACTIVE
   INACTIVE
   SUSPENDED
+}
+
+enum HrmsStatus {
+  ACTIVE
+  INACTIVE
+  YET_TO_JOIN
+}
+
+enum PayrollStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum InviteStatus {
+  INVITED
+  JOINED
+  PENDING
 }
 
 enum OrgStatus {
@@ -43,6 +61,12 @@ enum CorrectionStatus {
   PENDING
   MANAGER_APPROVED
   ADMIN_APPROVED
+  REJECTED
+}
+
+enum DwrStatus {
+  UNCONFIRMED
+  APPROVED
   REJECTED
 }
 
@@ -104,6 +128,17 @@ model User {
   org          Organization? @relation(fields: [orgId], references: [id])
   role         UserRole
   status       UserStatus @default(ACTIVE)
+  empCode      String?
+  phone        String?
+  department   String?
+  designation  String?
+  doj          DateTime?
+  hrmsStatus   HrmsStatus   @default(ACTIVE)
+  payrollStatus PayrollStatus @default(ACTIVE)
+  inviteStatus InviteStatus @default(INVITED)
+  shiftStartMinutes Int?
+  shiftEndMinutes   Int?
+  shiftLabel    String?
   email        String
   name         String?
   passwordHash String?
@@ -127,7 +162,8 @@ model User {
   corrections   CorrectionRequest[]
   managedCorrections    CorrectionRequest[] @relation("ManagerCorrection")
   adminCorrections      CorrectionRequest[] @relation("AdminCorrection")
-  dwr           DailyWorkReport[]
+  dwr           DailyWorkReport[] @relation("DWRUser")
+  approvedDwr   DailyWorkReport[] @relation("DWRApprovedBy")
   screenshots   Screenshot[]
   auditLogs     AuditLog[]
   sessions      Session[]
@@ -135,6 +171,7 @@ model User {
 
   @@unique([email])
   @@unique([orgId, email])
+  @@unique([orgId, empCode])
 }
 
 model Team {
@@ -309,12 +346,16 @@ model DailyWorkReport {
   orgId      String
   org        Organization @relation(fields: [orgId], references: [id])
   userId     String
-  user       User       @relation(fields: [userId], references: [id])
+  user       User       @relation("DWRUser", fields: [userId], references: [id])
   attendanceId String?
   attendance Attendance? @relation(fields: [attendanceId], references: [id])
   workDate   DateTime   @db.Date
   content    String
   managerNote String?
+  status     DwrStatus  @default(UNCONFIRMED)
+  approvedById String?
+  approvedBy User? @relation("DWRApprovedBy", fields: [approvedById], references: [id])
+  approvedAt DateTime?
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
 

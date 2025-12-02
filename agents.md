@@ -60,6 +60,13 @@ Goal: single Windows Electron app (one .exe) for all roles; includes UI shell + 
 - Design system theme: bold teal/blue gradient with indigo accents, white cards, and dark nav headers. Primary: #0ea5e9, secondary: #6366f1, accent: #0f172a (nav background), success: #10b981, warning: #f59e0b, danger: #ef4444. Apply to globals and UI components for consistent look.
 - UI should feel like a premium HRMS experience: gradient/glass cards, strong type hierarchy, confident contrast, and purposeful motion (framer-motion/GSAP) over flat boilerplate layouts.
 
+## Latest working notes
+- When creating users (manual or import) with no manager supplied, default manager = the creating org admin. Manager must belong to the same org and be active.
+- Org admins can bulk import users via CSV: headers `email,name,role,managerEmail,status,password`. Roles allowed: ORG_ADMIN, MANAGER, EMPLOYEE. Password is optional; we auto-generate a strong one if blank. Manager email is optional; if blank, we default to the org admin submitting the import.
+- Manager DWR page should keep “Team DWR” and “My DWR” separate to avoid clutter (tabs/sections are fine).
+- UI direction can follow the shared HRMS inspiration: deep blue-to-teal gradient header, rounded white cards with soft shadows, pill filters/chips for tables, and crisp data grids; when adding charts/animation lean on Recharts + framer-motion/GSAP/three for premium motion without breaking layouts.
+- Dashboards (Org Admin/Manager/Employee) should include rich data tables and charts similar to the HRMS references: filters for year/month/department/manager/payroll status/invite status, bulk action bar (roles, bulk edit, mail, import, export, invite, send message), and table columns for Employee ID, Name, Email, Phone, DOJ, Department, Manager, HRMS Status, Payroll Status, Shift Time. Charts should use Recharts with animated bars/pies/lines and motion polish from Framer Motion/GSAP where appropriate.
+
 ## Build Order (MVP-first)
 1) Foundation: Prisma schema + migrations, DB client, auth, RBAC middleware, audit logger, seed initial superadmin/org admin.
 2) Org/Superadmin: org CRUD, plan limits, org settings forms, holiday calendar.

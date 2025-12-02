@@ -10,6 +10,9 @@ type DwrRow = {
   workDate: string;
   content: string;
   managerNote?: string | null;
+  status?: "UNCONFIRMED" | "APPROVED" | "REJECTED";
+  approvedAt?: string | null;
+  approvedBy?: { name?: string | null; email?: string | null; id: string } | null;
   createdAt: string;
 };
 
@@ -71,6 +74,25 @@ export default function EmployeeDwrPage() {
       { title: "Date", dataIndex: "workDate", render: (v) => dayjs(v).format("YYYY-MM-DD") },
       { title: "Report", dataIndex: "content" },
       { title: "Manager note", dataIndex: "managerNote", render: (v) => v || "—" },
+      {
+        title: "Status",
+        dataIndex: "status",
+        render: (_v, record) => {
+          const status = record.status ?? "UNCONFIRMED";
+          const color = status === "APPROVED" ? "#16a34a" : status === "REJECTED" ? "#ef4444" : "#6b7280";
+          return (
+            <div className="text-sm" style={{ color }}>
+              {status}
+              {record.approvedBy ? (
+                <div className="text-xs text-slate-500">
+                  By {record.approvedBy.name || record.approvedBy.email || record.approvedBy.id}{" "}
+                  {record.approvedAt ? `on ${dayjs(record.approvedAt).format("YYYY-MM-DD")}` : ""}
+                </div>
+              ) : null}
+            </div>
+          );
+        },
+      },
       { title: "Submitted", dataIndex: "createdAt", render: (v) => dayjs(v).format("YYYY-MM-DD HH:mm") },
     ],
     [],

@@ -55,7 +55,27 @@ export async function GET(req: NextRequest) {
       earlyLeaveMinutes: true,
       externalBreakMinutes: true,
       overtimeMinutes: true,
-      user: { select: { id: true, name: true, email: true, managerId: true } },
+      breaks: {
+        select: {
+          id: true,
+          type: true,
+          start: true,
+          end: true,
+          deductedMinutes: true,
+        },
+      },
+      user: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          managerId: true,
+          department: true,
+          hrmsStatus: true,
+          payrollStatus: true,
+          empCode: true,
+        },
+      },
     },
   });
 
@@ -82,7 +102,19 @@ export async function GET(req: NextRequest) {
   const normalizedRecords = records.map((r) => {
     const isoDate = r.workDate.toISOString().slice(0, 10);
     const status = holidaySet.has(isoDate) && r.status === "ABSENT" ? "HOLIDAY" : r.status;
-    return { ...r, status };
+    const externalMinutes = r.breaks
+      .filter((b) => b.type === "EXTERNAL")
+      .reduce((acc, b) => acc + (b.deductedMinutes ?? 0), 0);
+    const lunchMinutes = r.breaks
+      .filter((b) => b.type === "LUNCH")
+      .reduce((acc, b) => acc + (b.end ? Math.max(0, (b.end.getTime() - b.start.getTime()) / 60000) : 0), 0);
+    const activeBreak = r.breaks.find((b) => !b.end);
+    const breakSummary = {
+      externalMinutes,
+      lunchMinutes,
+      activeType: activeBreak?.type ?? null,
+    };
+    return { ...r, status, breakSummary };
   });
 
   if (format === "csv" || format === "excel") {

@@ -51,10 +51,19 @@ export async function GET() {
       });
     }
   } else if (role === UserRole.MANAGER && orgId) {
-    const [pendingLeave, pendingCorrections] = await Promise.all([
+    const recentWindow = new Date(Date.now() - 1000 * 60 * 60 * 24 * 14); // last 14 days
+    const [pendingLeave, pendingCorrections, rejectedDwr] = await Promise.all([
       prisma.leaveRequest.count({ where: { orgId, status: LeaveRequestStatus.PENDING, user: { managerId: session.user.id } } }),
       prisma.correctionRequest.count({
         where: { orgId, status: CorrectionStatus.PENDING, user: { managerId: session.user.id } },
+      }),
+      prisma.dailyWorkReport.count({
+        where: {
+          orgId,
+          userId: session.user.id,
+          status: "REJECTED",
+          updatedAt: { gte: recentWindow },
+        },
       }),
     ]);
     if (pendingLeave > 0) {
@@ -68,6 +77,13 @@ export async function GET() {
       notifications.push({
         id: "team-pending-corrections",
         message: `${pendingCorrections} team correction request(s) need your review`,
+        type: "warning",
+      });
+    }
+    if (rejectedDwr > 0) {
+      notifications.push({
+        id: "manager-dwr-rejected",
+        message: `${rejectedDwr} of your DWR(s) were rejected recently by org admin`,
         type: "warning",
       });
     }

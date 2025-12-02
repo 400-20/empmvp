@@ -18,11 +18,12 @@ export async function GET() {
   const today = startOfUtcDay(new Date());
   const last30 = startOfUtcDay(new Date(today.getTime() - 1000 * 60 * 60 * 24 * 30));
 
-  const [usersActive, managers, employees, pendingLeave, pendingCorrections, todaysAttendance, last30Attendance] =
+  const [usersActive, managers, employees, orgAdmins, pendingLeave, pendingCorrections, todaysAttendance, last30Attendance] =
     await Promise.all([
       prisma.user.count({ where: { orgId, status: UserStatus.ACTIVE } }),
       prisma.user.count({ where: { orgId, role: UserRole.MANAGER, status: UserStatus.ACTIVE } }),
       prisma.user.count({ where: { orgId, role: UserRole.EMPLOYEE, status: UserStatus.ACTIVE } }),
+      prisma.user.count({ where: { orgId, role: UserRole.ORG_ADMIN, status: UserStatus.ACTIVE } }),
       prisma.leaveRequest.count({ where: { orgId, status: "PENDING" } }),
       prisma.correctionRequest.count({ where: { orgId, status: "PENDING" } }),
       prisma.attendance.groupBy({
@@ -62,6 +63,7 @@ export async function GET() {
       usersActive,
       managers,
       employees,
+      orgAdmins,
       pendingLeave,
       pendingCorrections,
       last30Days: {
